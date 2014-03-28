@@ -28,6 +28,17 @@ class RuggedTest < Rugged::TestCase
     assert_raises(TypeError) { Rugged::Settings['mwindow_size'] = nil }
   end
 
+  def test_search_path
+    paths = [['search_path_global', '/tmp/global'],
+             ['search_path_xdg', '/tmp/xdg'],
+             ['search_path_system', '/tmp/system']]
+
+    paths.each do |opt, path|
+      Rugged::Settings[opt] = path
+      assert_equal(path, Rugged::Settings[opt])
+    end
+  end
+
   def test_features
     features = Rugged.features
     assert features.is_a? Array
@@ -104,13 +115,13 @@ class RuggedTest < Rugged::TestCase
 
   def test_prettify_commit_messages
     message = <<-MESSAGE
-Testing this whole prettify business    
+Testing this whole prettify business
 
-with newlines and stuff  
+with newlines and stuff
 # take out this line haha
 # and this one
 
-not this one    
+not this one
 MESSAGE
 
     clean_message = <<-MESSAGE

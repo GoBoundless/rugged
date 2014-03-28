@@ -301,7 +301,7 @@ static VALUE rb_git_reference_collection_rename(int argc, VALUE *argv, VALUE sel
 {
 	VALUE rb_new_name, rb_name_or_ref, rb_options;
 	VALUE rb_repo = rugged_owner(self);
-	git_reference *ref, *out;
+	git_reference *ref, *out = NULL;
 	git_repository *repo;
 	git_signature *signature = NULL;
 	char *log_message = NULL;
@@ -333,7 +333,7 @@ static VALUE rb_git_reference_collection_rename(int argc, VALUE *argv, VALUE sel
 			log_message = StringValueCStr(rb_val);
 	}
 
-	if ((error = git_reference_lookup(&ref, repo, StringValueCStr(rb_name_or_ref))) == GIT_OK);
+	if ((error = git_reference_lookup(&ref, repo, StringValueCStr(rb_name_or_ref))) == GIT_OK)
 		error = git_reference_rename(&out, ref, StringValueCStr(rb_new_name), force, signature, log_message);
 
 	git_reference_free(ref);

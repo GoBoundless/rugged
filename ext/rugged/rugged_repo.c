@@ -291,7 +291,8 @@ static VALUE rb_git_repo_init_at(int argc, VALUE *argv, VALUE klass)
 
 static VALUE rugged__block_yield_splat(VALUE args) {
 	VALUE block = rb_ary_shift(args);
-	int n = RARRAY_LEN(args);
+	int n = RARRAY_LENINT(args);
+
 	if (n == 0) {
 		return rb_funcall(block, rb_intern("call"), 0);
 	} else {
@@ -299,7 +300,7 @@ static VALUE rugged__block_yield_splat(VALUE args) {
 		VALUE *argv;
 		argv = ALLOCA_N(VALUE, n);
 
-		for (i=0; i<n; i++) {
+		for (i=0; i < n; i++) {
 			argv[i] = rb_ary_entry(args, i);
 		}
 
@@ -460,6 +461,12 @@ static void parse_clone_options(git_clone_options *ret, VALUE rb_options_hash, s
 	if (RTEST(val))
 		ret->bare = 1;
 
+	val = rb_hash_aref(rb_options_hash, CSTR2SYM("checkout_branch"));
+	if (!NIL_P(val)) {
+		Check_Type(val, T_STRING);
+		ret->checkout_branch = StringValueCStr(val);
+	}
+
 	val = rb_hash_aref(rb_options_hash, CSTR2SYM("credentials"));
 	if (RTEST(val)) {
 		if (rb_obj_is_kind_of(val, rb_cRuggedCredPlaintext) ||
@@ -508,7 +515,7 @@ static void parse_clone_options(git_clone_options *ret, VALUE rb_options_hash, s
  *    If +true+, the clone will be created as a bare repository.
  *    Defaults to +false+.
  *
- *  :branch ::
+ *  :checkout_branch ::
  *    The name of a branch to checkout. Defaults to the remote's +HEAD+.
  *
  *  :remote ::
@@ -707,6 +714,77 @@ static VALUE rb_git_repo_merge_base(VALUE self, VALUE rb_args)
 
 /*
  *  call-seq:
+ *    repo.merge_analysis(their_commit) -> Array
+ *
+ *  Analyzes the given commit and determines the opportunities for merging
+ *  it into the repository's HEAD. Returns an Array containing a combination
+ *  of the following symbols:
+ *
+ *  :normal ::
+ *    A "normal" merge is possible, both HEAD and the given commit have
+ *    diverged from their common ancestor. The divergent commits must be
+ *    merged.
+ *
+ *  :up_to_date ::
+ *    The given commit is reachable from HEAD, meaning HEAD is up-to-date
+ *    and no merge needs to be performed.
+ *
+ *  :fastforward ::
+ *    The given commit is a fast-forward from HEAD and no merge needs to be
+ *    performed. HEAD can simply be set to the given commit.
+ *    
+ *  :unborn ::
+ *    The HEAD of the current repository is "unborn" and does not point to
+ *    a valid commit. No merge can be performed, but the caller may wish
+ *    to simply set HEAD to the given commit.
+ */
+static VALUE rb_git_repo_merge_analysis(int argc, VALUE *argv, VALUE self)
+{
+	int error;
+	git_repository *repo;
+	git_commit *their_commit;
+	git_merge_head *merge_head;
+	git_merge_analysis_t analysis;
+	VALUE rb_their_commit, result;
+
+	rb_scan_args(argc, argv, "10", &rb_their_commit);
+
+	Data_Get_Struct(self, git_repository, repo);
+
+	if (TYPE(rb_their_commit) == T_STRING) {
+		rb_their_commit = rugged_object_rev_parse(self, rb_their_commit, 1);
+	}
+
+	if (!rb_obj_is_kind_of(rb_their_commit, rb_cRuggedCommit)) {
+		rb_raise(rb_eArgError, "Expected a Rugged::Commit.");
+	}
+
+	Data_Get_Struct(rb_their_commit, git_commit, their_commit);
+
+	error = git_merge_head_from_id(&merge_head, repo, git_commit_id(their_commit));
+	rugged_exception_check(error);
+
+	error = git_merge_analysis(&analysis, repo,
+				   /* hack as we currently only do one commit */
+				   (const git_merge_head **) &merge_head, 1);
+	git_merge_head_free(merge_head);
+	rugged_exception_check(error);
+
+	result = rb_ary_new();
+	if (analysis & GIT_MERGE_ANALYSIS_NORMAL)
+		rb_ary_push(result, CSTR2SYM("normal"));
+	if (analysis & GIT_MERGE_ANALYSIS_UP_TO_DATE)
+		rb_ary_push(result, CSTR2SYM("up_to_date"));
+	if (analysis & GIT_MERGE_ANALYSIS_FASTFORWARD)
+		rb_ary_push(result, CSTR2SYM("fastforward"));
+	if (analysis & GIT_MERGE_ANALYSIS_UNBORN)
+		rb_ary_push(result, CSTR2SYM("unborn"));
+
+	return result;
+}
+
+/*
+ *  call-seq:
  *    repo.merge_commits(our_commit, their_commit, options = {}) -> index
  *
  *  Merges the two given commits, returning a Rugged::Index that reflects
@@ -721,7 +799,7 @@ static VALUE rb_git_repo_merge_commits(int argc, VALUE *argv, VALUE self)
 	git_commit *our_commit, *their_commit;
 	git_index *index;
 	git_repository *repo;
-	git_merge_tree_opts opts = GIT_MERGE_TREE_OPTS_INIT;
+	git_merge_options opts = GIT_MERGE_OPTIONS_INIT;
 
 	rb_scan_args(argc, argv, "20:", &rb_our_commit, &rb_their_commit, &rb_options);
 
@@ -1756,9 +1834,9 @@ static int rugged__checkout_notify_cb(
 }
 
 /**
- * The caller has to free the returned git_checkout_opts paths strings array.
+ * The caller has to free the returned git_checkout_options paths strings array.
  */
-static void rugged_parse_checkout_options(git_checkout_opts *opts, VALUE rb_options)
+static void rugged_parse_checkout_options(git_checkout_options *opts, VALUE rb_options)
 {
 	VALUE rb_value;
 
@@ -2029,7 +2107,7 @@ static VALUE rb_git_checkout_tree(int argc, VALUE *argv, VALUE self)
 	VALUE rb_treeish, rb_options;
 	git_repository *repo;
 	git_object *treeish;
-	git_checkout_opts opts = GIT_CHECKOUT_OPTS_INIT;
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
 	struct rugged_cb_payload *payload;
 	int error, exception = 0;
 
@@ -2083,7 +2161,7 @@ static VALUE rb_git_checkout_head(int argc, VALUE *argv, VALUE self)
 {
 	VALUE rb_options;
 	git_repository *repo;
-	git_checkout_opts opts = GIT_CHECKOUT_OPTS_INIT;
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
 	struct rugged_cb_payload *payload;
 	int error, exception = 0;
 
@@ -2160,6 +2238,7 @@ void Init_rugged_repo(void)
 	rb_define_method(rb_cRuggedRepo, "head", rb_git_repo_get_head, 0);
 
 	rb_define_method(rb_cRuggedRepo, "merge_base", rb_git_repo_merge_base, -2);
+	rb_define_method(rb_cRuggedRepo, "merge_analysis", rb_git_repo_merge_analysis, -1);
 	rb_define_method(rb_cRuggedRepo, "merge_commits", rb_git_repo_merge_commits, -1);
 
 	rb_define_method(rb_cRuggedRepo, "reset", rb_git_repo_reset, -1);

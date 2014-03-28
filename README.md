@@ -17,9 +17,9 @@ Rugged is a self-contained gem. You can install it by running:
 
     $ gem install rugged
 
-Check the list of optional [libgit2 dependencies](https://github.com/libgit2/libgit2#optional-dependencies) for different functionalities (like HTTPS and SSH support).
+You need to have CMake installed on your system to be able to build the included version of `libgit2`. If you want to build Rugged with HTTPS and SSH support, check out the list of optional [libgit2 dependencies](https://github.com/libgit2/libgit2#optional-dependencies).
 
-If you're using bundler and want to bundle libgit2 with rugged, you can use the `:submodules` option:
+If you're using bundler and want to bundle `libgit2` with Rugged, you can use the `:submodules` option:
 
 ```ruby
 gem 'rugged', git: 'git://github.com/libgit2/rugged.git', branch: 'development', submodules: true
@@ -385,7 +385,7 @@ repo.branches.each_name().sort
 repo.branches.each_name(:local).sort
 # => ["master"]
 
-Rugged::Branch.each_name(:remote).sort
+repo.branches.each_name(:remote).sort
 # => ["origin/HEAD", "origin/master", "origin/packed"]
 ```
 
@@ -469,6 +469,11 @@ Simply clone and install:
     $ rake compile
     $ rake test
 
+## Support
+
+We encourage you to use StackOverflow for any questions or concerns regarding Rugged. Please tag your questions with the [rugged](http://stackoverflow.com/questions/tagged/rugged) keyword.
+
+For bug reports, please open a ticket on the GitHub [issue tracker](https://github.com/libgit2/rugged/issues).
 
 ## Authors
 
