@@ -31,11 +31,12 @@ CWD = File.expand_path(File.dirname(__FILE__))
 LIBGIT2_DIR = File.join(CWD, '..', '..', 'vendor', 'libgit2')
 
 Dir.chdir(LIBGIT2_DIR) do
-  Dir.mkdir("build") if !Dir.exists?("build")
+  # Note: in order for this to work on Heroku we need to kill the build cache for every build
+  FileUtils.rm_rf("build")
+  Dir.mkdir("build") # if !Dir.exists?("build")
 
   Dir.chdir("build") do
-    puts `cmake .. -DBUILD_CLAR=OFF -DTHREADSAFE=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS=-fPIC`
-    # sys("cmake .. -DBUILD_CLAR=OFF -DTHREADSAFE=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS=-fPIC")
+    sys("cmake .. -DBUILD_CLAR=OFF -DTHREADSAFE=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS=-fPIC")
     sys(MAKE)
 
     pcfile = File.join(LIBGIT2_DIR, "build", "libgit2.pc")
